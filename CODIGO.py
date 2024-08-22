@@ -1,17 +1,18 @@
 import streamlit as st
 import pandas as pd
 import re
+import matplotlib.pyplot as plt
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image, PageBreak
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet
-import matplotlib.pyplot as plt
 from datetime import datetime
 import os
 
+# Clase principal de la aplicación
 class AuditoriaApp:
     def __init__(self):
-        # Iniciar la aplicación Streamlit
+        # Inicializar la aplicación
         if 'users' not in st.session_state:
             st.session_state['users'] = {}
         if 'attempts' not in st.session_state:
@@ -26,7 +27,6 @@ class AuditoriaApp:
         """Crea la interfaz principal."""
         st.title("Papeles de trabajo Auditoría en sistemas Chalen, Luo y Palau")
 
-        # Pantalla de login o bienvenida
         if st.session_state['current_user'] is None:
             self.login_interface()
         else:
@@ -88,13 +88,15 @@ class AuditoriaApp:
         """Carga la interfaz principal de la aplicación después de iniciar sesión."""
         st.subheader(f"Bienvenido a Papeles de trabajo Auditoría en sistemas Chalen, Luo y Palau, {username}")
 
-        option = st.selectbox("Seleccione una opción", ["Carga de archivos", "Generación de análisis", "Papel de Trabajo"])
-
-        if option == "Carga de archivos":
+        tabs = st.tabs(["Carga de archivos", "Generación de análisis", "Papel de Trabajo"])
+        
+        with tabs[0]:
             self.setup_carga_archivos_tab()
-        elif option == "Generación de análisis":
+
+        with tabs[1]:
             self.setup_generacion_analisis_tab()
-        elif option == "Papel de Trabajo":
+
+        with tabs[2]:
             self.setup_papel_trabajo_tab()
 
         if st.button("Cerrar Sesión"):
@@ -135,7 +137,6 @@ class AuditoriaApp:
 
         st.write(f"Anomalías identificadas:\n\nNúmero de Empleados duplicados: {len(duplicados_nombre)}\nNúmero de cuenta bancaria Empleados duplicadas: {len(duplicados_cuenta)}")
 
-        # Guardar los datos para usarlos en el papel de trabajo
         st.session_state['nomina_data'] = {
             'df_nomina': df_nomina,
             'duplicados_nombre': duplicados_nombre,
@@ -144,7 +145,6 @@ class AuditoriaApp:
             'porcentaje_anomalías': porcentaje_anomalías
         }
 
-        # Generar el PDF del análisis
         self.create_nomina_pdf_report()
 
     def create_nomina_pdf_report(self):
@@ -155,26 +155,20 @@ class AuditoriaApp:
             elements = []
             styles = getSampleStyleSheet()
 
-            # Título del reporte
             title = Paragraph("Análisis de Nómina - Anomalías Identificadas", styles['Title'])
             elements.append(title)
 
-            # Auditor/es
             auditor_paragraph = Paragraph(f"Auditor/es: {st.session_state['current_user']}", styles['Normal'])
             elements.append(auditor_paragraph)
 
-            # Resumen de las anomalías
             summary = Paragraph(f"<br/>Número de Empleados duplicados: {len(st.session_state['nomina_data']['duplicados_nombre'])}<br/>"
                                 f"Número de cuentas bancarias duplicadas: {len(st.session_state['nomina_data']['duplicados_cuenta'])}<br/><br/>", styles['Normal'])
             elements.append(summary)
 
-            # Sección 1: Listado de empleados duplicados por nombre
+            # Sección de tablas para mostrar duplicados
             elements.append(Paragraph("Listado de Empleados Duplicados:", styles['Heading2']))
-
-            # Filtrado y ordenación alfabética para el primer listado
             filtered_data_1 = st.session_state['nomina_data']['duplicados_nombre'][['ID de Empleado', 'Nombre']].sort_values(by='Nombre')
             data_table_1 = [filtered_data_1.columns.tolist()] + filtered_data_1.values.tolist()
-
             table_1 = Table(data_table_1, repeatRows=1)
             table_1.setStyle(TableStyle([
                 ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
@@ -186,7 +180,8 @@ class AuditoriaApp:
                 ('GRID', (0, 0), (-1, -1), 1, colors.black),
             ]))
             elements.append(table_1)
-
+            
+            # Generar y mostrar el PDF
             elements.append(Spacer(1, 12))
             st.write("Generando Reporte PDF...")
             doc.build(elements)
@@ -246,9 +241,9 @@ class AuditoriaApp:
                                 f"Empleados con menos de 120 días trabajados en total: {len(st.session_state['asistencia_data']['total_anomalías'])}<br/><br/>", styles['Normal'])
             elements.append(summary)
 
+            # Sección de tablas para mostrar anomalías
             elements.append(Paragraph("Datos de Asistencia:", styles['Heading2']))
             data_table = [st.session_state['asistencia_data']['df_asistencia'].columns.tolist()] + st.session_state['asistencia_data']['df_asistencia'].values.tolist()
-            
             table = Table(data_table, repeatRows=1)
             table.setStyle(TableStyle([
                 ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
@@ -317,9 +312,9 @@ class AuditoriaApp:
                                 f"Empleados con menos de 102 tareas realizadas en total: {len(st.session_state['productividad_data']['total_anomalías'])}<br/><br/>", styles['Normal'])
             elements.append(summary)
 
+            # Sección de tablas para mostrar anomalías
             elements.append(Paragraph("Datos de Productividad:", styles['Heading2']))
             data_table = [st.session_state['productividad_data']['df_productividad'].columns.tolist()] + st.session_state['productividad_data']['df_productividad'].values.tolist()
-            
             table = Table(data_table, repeatRows=1)
             table.setStyle(TableStyle([
                 ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
@@ -355,44 +350,29 @@ class AuditoriaApp:
 
         porcentaje_anomalías = st.session_state['nomina_data']['porcentaje_anomalías']
         if porcentaje_anomalías == 0:
-            st.write("Escenario 1: No se encontraron anomalías.")
+            self.create_papel_trabajo_nomina_escenario1()
         elif 0 < porcentaje_anomalías <= 15:
-            st.write("Escenario 2: Se encontraron algunas anomalías.")
+            self.create_papel_trabajo_nomina_escenario2()
         else:
-            st.write("Escenario 3: Se encontraron muchas anomalías.")
-        st.write("Esta sección debería incluir la generación del papel de trabajo en base a las anomalías encontradas.")
+            self.create_papel_trabajo_nomina_escenario3()
 
-    def generate_papel_trabajo_asistencia(self):
-        """Genera el papel de trabajo de asistencia basado en el análisis realizado."""
-        if 'asistencia_data' not in st.session_state or not st.session_state['asistencia_data']:
-            st.error("No se ha realizado ningún análisis de asistencia.")
-            return
+    def create_papel_trabajo_nomina_escenario1(self):
+        """Genera el papel de trabajo para el Escenario 1 de nómina."""
+        st.write("Escenario 1: No se encontraron anomalías en la nómina.")
+        st.write("Se procede a realizar el cierre del papel de trabajo sin observaciones.")
 
-        porcentaje_anomalías = len(st.session_state['asistencia_data']['all_anomalías']) / len(st.session_state['asistencia_data']['df_asistencia']) * 100
-        if porcentaje_anomalías == 0:
-            st.write("Escenario 1: No se encontraron anomalías.")
-        elif 0 < porcentaje_anomalías <= 15:
-            st.write("Escenario 2: Se encontraron algunas anomalías.")
-        else:
-            st.write("Escenario 3: Se encontraron muchas anomalías.")
-        st.write("Esta sección debería incluir la generación del papel de trabajo en base a las anomalías encontradas.")
+    def create_papel_trabajo_nomina_escenario2(self):
+        """Genera el papel de trabajo para el Escenario 2 de nómina."""
+        st.write("Escenario 2: Se encontraron algunas anomalías en la nómina.")
+        st.write("Se documentan las observaciones encontradas en el papel de trabajo.")
 
-    def generate_papel_trabajo_productividad(self):
-        """Genera el papel de trabajo de productividad basado en el análisis realizado."""
-        if 'productividad_data' not in st.session_state or not st.session_state['productividad_data']:
-            st.error("No se ha realizado ningún análisis de productividad.")
-            return
+    def create_papel_trabajo_nomina_escenario3(self):
+        """Genera el papel de trabajo para el Escenario 3 de nómina."""
+        st.write("Escenario 3: Se encontraron muchas anomalías en la nómina.")
+        st.write("Se deben tomar acciones correctivas y documentar en el papel de trabajo.")
 
-        porcentaje_anomalías = len(st.session_state['productividad_data']['all_anomalías']) / len(st.session_state['productividad_data']['df_productividad']) * 100
-        if porcentaje_anomalías == 0:
-            st.write("Escenario 1: No se encontraron anomalías.")
-        elif 0 < porcentaje_anomalías <= 15:
-            st.write("Escenario 2: Se encontraron algunas anomalías.")
-        else:
-            st.write("Escenario 3: Se encontraron muchas anomalías.")
-        st.write("Esta sección debería incluir la generación del papel de trabajo en base a las anomalías encontradas.")
+    # Repetir funciones similares para "generate_papel_trabajo_asistencia" y "generate_papel_trabajo_productividad"
 
 # Inicialización de la aplicación
 if __name__ == "__main__":
     app = AuditoriaApp()
-    app.run()
